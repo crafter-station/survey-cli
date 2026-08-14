@@ -221,17 +221,17 @@ export function buildProgram(): Command {
           process.exit(1);
         }
 
-        if (action === "show") {
-          const response = readResponse(id, timestamp);
-          if (!response) {
-            console.error(pc.red("not found"));
-            process.exit(1);
-          }
-          console.log(colorizeJson(response));
-          return;
-        }
-
         try {
+          if (action === "show") {
+            const response = readResponse(id, timestamp);
+            if (!response) {
+              console.error(pc.red("not found"));
+              process.exit(1);
+            }
+            console.log(colorizeJson(response));
+            return;
+          }
+
           const deleted = deleteResponse(id, timestamp);
           if (!deleted) {
             console.error(pc.red(`Response not found: ${timestamp}`));

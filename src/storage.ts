@@ -92,11 +92,31 @@ export function readResponse(
   surveyId: string,
   timestamp: string,
 ): SavedResponse | null {
-  return (
-    listResponses(surveyId).find((response) =>
-      response.timestamp.startsWith(timestamp),
-    ) ?? null
-  );
+  const dir = surveyDir(surveyId);
+  if (!existsSync(dir)) return null;
+
+  const matches = responseFiles(dir)
+    .map((file) => ({ file, timestamp: responseTimestamp(file) }))
+    .filter((entry) => entry.timestamp.startsWith(timestamp))
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+  const [match] = matches;
+  if (!match) return null;
+  if (matches.length > 1) {
+    throw new AmbiguousResponsePrefixError(
+      timestamp,
+      matches.map((entry) => entry.timestamp),
+    );
+  }
+
+  const response = JSON.parse(
+    readFileSync(join(dir, match.file), "utf8"),
+  ) as SavedResponse;
+
+  // Resolved from the enumerated filename, matching deleteResponse: the
+  // filename is the authoritative identity, so `show <prefix>` and
+  // `delete <prefix>` can never resolve to different responses.
+  return { ...response, timestamp: match.timestamp };
 }
 
 export function deleteResponse(

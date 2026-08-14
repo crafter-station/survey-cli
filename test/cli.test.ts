@@ -73,6 +73,76 @@ describe("buildProgram", () => {
     }
   });
 
+  test("responses show reports an ambiguous prefix instead of printing the first match", async () => {
+    const first = writeResponse(
+      "2026-04-30T06-00-00-000Z.json",
+      "2026-04-30T06-00-00-000Z",
+    );
+    const second = writeResponse(
+      "2026-04-30T06-00-30-000Z.json",
+      "2026-04-30T06-00-30-000Z",
+    );
+    const log = spyOn(console, "log").mockImplementation(() => undefined);
+    const error = spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("exit");
+    }) as never);
+
+    try {
+      await buildProgram()
+        .parseAsync([
+          "node",
+          "survey",
+          "responses",
+          "onboarding",
+          "show",
+          "2026-04-30T06-00",
+        ])
+        .catch(() => undefined);
+
+      expect(exit).toHaveBeenCalledWith(1);
+      const message = String(error.mock.calls[0]?.[0]);
+      expect(message).toContain("Ambiguous response timestamp");
+      expect(message).toContain("2026-04-30T06-00-00-000Z");
+      expect(message).toContain("2026-04-30T06-00-30-000Z");
+      expect(log).not.toHaveBeenCalled();
+      // No response file is modified.
+      expect(existsSync(first)).toBe(true);
+      expect(existsSync(second)).toBe(true);
+    } finally {
+      log.mockRestore();
+      error.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  test("responses show still reports a missing prefix as not found", async () => {
+    writeResponse("2026-04-30T06-00-00-000Z.json", "2026-04-30T06-00-00-000Z");
+    const error = spyOn(console, "error").mockImplementation(() => undefined);
+    const exit = spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("exit");
+    }) as never);
+
+    try {
+      await buildProgram()
+        .parseAsync([
+          "node",
+          "survey",
+          "responses",
+          "onboarding",
+          "show",
+          "2026-05",
+        ])
+        .catch(() => undefined);
+
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(String(error.mock.calls[0]?.[0])).toContain("not found");
+    } finally {
+      error.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
   test("documented responses delete syntax deletes the response", async () => {
     const path = writeResponse(
       "2026-04-30T06-00-00-000Z.json",
