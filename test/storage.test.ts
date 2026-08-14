@@ -24,6 +24,7 @@ import {
   listResponses,
   loadInProgress,
   loadSurveyById,
+  readResponse,
   saveInProgress,
   saveResponse,
 } from "../src/storage.ts";
@@ -88,6 +89,18 @@ describe("storage", () => {
 
     expect(listResponses("onboarding")).toHaveLength(1);
     expect(listResponses("onboarding")[0]?.answers).toEqual({ role: "dev" });
+  });
+
+  test("response lookups do not create storage for a missing survey", () => {
+    const dir = join(home, "missing");
+
+    expect(loadInProgress("missing")).toBeNull();
+    clearInProgress("missing");
+    expect(listResponses("missing")).toEqual([]);
+    expect(readResponse("missing", "2026")).toBeNull();
+    expect(deleteResponse("missing", "2026")).toBeNull();
+
+    expect(existsSync(dir)).toBe(false);
   });
 
   test("deleteResponse removes a uniquely matching saved response", () => {
