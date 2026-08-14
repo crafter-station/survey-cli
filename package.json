@@ -38,7 +38,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "lint": "biome check --write .",
+    "lint": "bun run lint:cli && bun run lint:site",
+    "lint:cli": "biome check src test bin package.json tsconfig.json biome.json",
+    "lint:site": "cd site && biome check .",
+    "lint:fix": "bun run lint:cli -- --write && bun run lint:site -- --write",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "build": "bun build --compile --target=bun-darwin-arm64 ./bin/survey.ts --outfile dist/survey",
