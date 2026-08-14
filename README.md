@@ -80,8 +80,10 @@ Track in [issues](https://github.com/crafter-station/survey-cli/issues).
 
 ## Roadmap (product)
 
-V1 (current) — local-first, no backend, JSON storage.
-Future — hosted backend, web dashboard, AI form builder. See `shaping.md`.
+V1 (current) is local-first, with no backend and JSON storage.
+The current direction is a stable protocol for human and agent submissions. See
+[NORTH.md](./NORTH.md) and the selected
+[agent machine output shape](./docs/shaping/agent-machine-output.md).
 
 ## License
 
