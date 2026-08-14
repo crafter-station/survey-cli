@@ -15,8 +15,12 @@ export function storageHome(): string {
   return process.env.SURVEY_CLI_HOME ?? join(homedir(), ".survey-cli");
 }
 
+function surveyPath(surveyId: string): string {
+  return join(storageHome(), surveyId);
+}
+
 export function surveyDir(surveyId: string): string {
-  const dir = join(storageHome(), surveyId);
+  const dir = surveyPath(surveyId);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -67,18 +71,18 @@ export function saveInProgress(
 }
 
 export function loadInProgress(surveyId: string): SavedResponse | null {
-  const path = join(surveyDir(surveyId), "in-progress.json");
+  const path = join(surveyPath(surveyId), "in-progress.json");
   if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf8")) as SavedResponse;
 }
 
 export function clearInProgress(surveyId: string): void {
-  const path = join(surveyDir(surveyId), "in-progress.json");
+  const path = join(surveyPath(surveyId), "in-progress.json");
   if (existsSync(path)) unlinkSync(path);
 }
 
 export function listResponses(surveyId: string): SavedResponse[] {
-  const dir = surveyDir(surveyId);
+  const dir = surveyPath(surveyId);
   if (!existsSync(dir)) return [];
   return responseFiles(dir)
     .map(
@@ -103,7 +107,8 @@ export function deleteResponse(
   surveyId: string,
   timestamp: string,
 ): SavedResponse | null {
-  const dir = surveyDir(surveyId);
+  const dir = surveyPath(surveyId);
+  if (!existsSync(dir)) return null;
   const matches = responseFiles(dir)
     .map((file) => ({ file, timestamp: responseTimestamp(file) }))
     .filter((entry) => entry.timestamp.startsWith(timestamp));
