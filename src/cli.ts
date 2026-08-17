@@ -4,6 +4,12 @@ import pc from "picocolors";
 import { buildCsvExport } from "./export.ts";
 import { runAgent } from "./runner/agent.ts";
 import { runInteractive } from "./runner/interactive.ts";
+import {
+  agentErrorsToDetails,
+  buildMachineFailure,
+  buildMachineSuccess,
+  exitForMachineResult,
+} from "./runner/machine.ts";
 import { showSummary } from "./runner/summary.ts";
 import { scaffoldSurvey } from "./scaffold.ts";
 import { serializeSurvey } from "./serialize.ts";
@@ -96,7 +102,18 @@ export function buildProgram(): Command {
     )
     .option("--json", "agent batch: read answers from stdin as JSON")
     .option("-y, --yes", "skip summary confirm prompt")
+    .option("--output <format>", "machine output format (json)")
     .action(async (id, opts) => {
+      if (opts.output !== undefined && opts.output !== "json") {
+        console.error(`Unknown output format: ${opts.output}`);
+        process.exit(1);
+      }
+
+      if (opts.output === "json") {
+        await takeMachine(id, opts);
+        return;
+      }
+
       const survey = await loadSurveyById(id, opts.dir);
       if (!survey) {
         console.error(pc.red(`Survey not found: ${id}`));
@@ -266,6 +283,78 @@ export function buildProgram(): Command {
     });
 
   return program;
+}
+
+type TakeMachineOpts = {
+  dir: string;
+  answers?: string;
+  json?: boolean;
+  yes?: boolean;
+};
+
+async function takeMachine(id: string, opts: TakeMachineOpts): Promise<never> {
+  if (!opts.answers && !opts.json) {
+    exitForMachineResult(
+      buildMachineFailure({
+        code: "MACHINE_MODE_REQUIRES_BATCH",
+        surveyId: id,
+      }),
+    );
+  }
+
+  if (!opts.yes) {
+    exitForMachineResult(
+      buildMachineFailure({
+        code: "MACHINE_MODE_REQUIRES_YES",
+        surveyId: id,
+      }),
+    );
+  }
+
+  const survey = await loadSurveyById(id, opts.dir);
+  if (!survey) {
+    exitForMachineResult(
+      buildMachineFailure({
+        code: "SURVEY_NOT_FOUND",
+        surveyId: id,
+      }),
+    );
+  }
+
+  const raw = opts.json ? await Bun.stdin.text() : (opts.answers as string);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    exitForMachineResult(
+      buildMachineFailure({
+        code: "INVALID_JSON",
+        surveyId: id,
+        message: `Invalid JSON: ${(error as Error).message}`,
+      }),
+    );
+  }
+
+  const result = runAgent(survey, parsed);
+  if (!result.ok) {
+    exitForMachineResult(
+      buildMachineFailure({
+        code: "VALIDATION_FAILED",
+        surveyId: survey.id,
+        details: agentErrorsToDetails(result.errors),
+        visited: result.visited,
+      }),
+    );
+  }
+
+  const responsePath = saveResponse(survey.id, result.answers);
+  exitForMachineResult(
+    buildMachineSuccess({
+      surveyId: survey.id,
+      responsePath,
+      visited: result.visited,
+    }),
+  );
 }
 
 function colorizeJson(value: unknown): string {
