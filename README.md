@@ -52,6 +52,8 @@ survey schema <id>                     # print survey schema as JSON
 survey take <id>                       # interactive (humano en TTY)
 survey take <id> --answers '{...}'     # agent batch
 echo '{...}' | survey take <id> --json # agent batch via stdin
+survey take <id> --answers '{...}' --output json --yes   # machine JSON result
+echo '{...}' | survey take <id> --json --output json --yes
 survey take <id> --yes                 # skip summary confirm
 survey responses <id>                  # list saved responses
 survey responses <id> --export csv     # export all to CSV
@@ -67,6 +69,7 @@ Responses persist to `~/.survey-cli/<survey-id>/<timestamp>.json`. Override with
 |---|---|---|
 | **Interactive** | Humano en TTY | `survey take <id>` |
 | **Agent batch** | Pipeline / IA agent / CI | `survey take <id> --answers '{...}'` |
+| **Machine JSON** | Agent needs parseable stdout | `survey take <id> --answers '{...}' --output json --yes` |
 | **Resume** | Cancelaste a la mitad | `survey take <id>` (auto-detecta in-progress) |
 
 ## Roadmap (skills — deferred)
