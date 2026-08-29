@@ -15,8 +15,21 @@ export function storageHome(): string {
   return process.env.SURVEY_CLI_HOME ?? join(homedir(), ".survey-cli");
 }
 
+/**
+ * Where a survey's responses live. Does not touch the filesystem.
+ *
+ * Split from `surveyDir` because reading is not a reason to write. Asking for
+ * a survey that has never been answered used to leave an empty directory
+ * behind, so `survey responses missing` printed "(no responses)" and created
+ * `missing/` on the way.
+ */
+export function surveyDirPath(surveyId: string): string {
+  return join(storageHome(), surveyId);
+}
+
+/** The same path, created if absent. For write paths only. */
 export function surveyDir(surveyId: string): string {
-  const dir = join(storageHome(), surveyId);
+  const dir = surveyDirPath(surveyId);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -67,18 +80,20 @@ export function saveInProgress(
 }
 
 export function loadInProgress(surveyId: string): SavedResponse | null {
-  const path = join(surveyDir(surveyId), "in-progress.json");
+  const path = join(surveyDirPath(surveyId), "in-progress.json");
   if (!existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf8")) as SavedResponse;
 }
 
 export function clearInProgress(surveyId: string): void {
-  const path = join(surveyDir(surveyId), "in-progress.json");
+  const path = join(surveyDirPath(surveyId), "in-progress.json");
   if (existsSync(path)) unlinkSync(path);
 }
 
 export function listResponses(surveyId: string): SavedResponse[] {
-  const dir = surveyDir(surveyId);
+  const dir = surveyDirPath(surveyId);
+  // This guard was unreachable before: surveyDir had already created the
+  // directory it was checking for.
   if (!existsSync(dir)) return [];
   return responseFiles(dir)
     .map(
@@ -103,7 +118,9 @@ export function deleteResponse(
   surveyId: string,
   timestamp: string,
 ): SavedResponse | null {
-  const dir = surveyDir(surveyId);
+  const dir = surveyDirPath(surveyId);
+  // Nothing stored means nothing to delete, and readdirSync would throw ENOENT.
+  if (!existsSync(dir)) return null;
   const matches = responseFiles(dir)
     .map((file) => ({ file, timestamp: responseTimestamp(file) }))
     .filter((entry) => entry.timestamp.startsWith(timestamp));

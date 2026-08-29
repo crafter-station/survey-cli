@@ -24,8 +24,10 @@ import {
   listResponses,
   loadInProgress,
   loadSurveyById,
+  readResponse,
   saveInProgress,
   saveResponse,
+  surveyDirPath,
 } from "../src/storage.ts";
 
 const originalHome = process.env.SURVEY_CLI_HOME;
@@ -188,5 +190,74 @@ describe("storage", () => {
       questions: [],
     });
     await expect(loadSurveyById("missing", dir)).resolves.toBeNull();
+  });
+});
+
+describe("lookups leave no directories behind", () => {
+  // Reading is not a reason to write. `surveyDir` created the directory it was
+  // about to look inside, so every miss left an empty folder in storage.
+
+  test("listing a survey that has no responses creates nothing", () => {
+    expect(listResponses("missing")).toEqual([]);
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+    expect(existsSync(home)).toBe(false);
+  });
+
+  test("showing a response for a missing survey creates nothing", () => {
+    expect(readResponse("missing", "2026-04-30")).toBeNull();
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+  });
+
+  test("deleting a response for a missing survey creates nothing", () => {
+    // This one also had to stop readdirSync throwing ENOENT once the directory
+    // was no longer being conjured first.
+    expect(deleteResponse("missing", "2026-04-30")).toBeNull();
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+  });
+
+  test("loading in-progress state for a missing survey creates nothing", () => {
+    expect(loadInProgress("missing")).toBeNull();
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+  });
+
+  test("clearing in-progress state for a missing survey creates nothing", () => {
+    expect(() => clearInProgress("missing")).not.toThrow();
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+  });
+
+  test("a miss on one survey does not disturb another that does exist", () => {
+    saveResponse("real", { q1: "yes" });
+    expect(listResponses("missing")).toEqual([]);
+    expect(existsSync(surveyDirPath("missing"))).toBe(false);
+    expect(listResponses("real")).toHaveLength(1);
+  });
+
+  test("surveyDirPath does not touch the filesystem", () => {
+    const path = surveyDirPath("never-created");
+    expect(path).toBe(join(home, "never-created"));
+    expect(existsSync(path)).toBe(false);
+  });
+});
+
+describe("write paths still create what they need", () => {
+  test("saving a completed response creates the directory", () => {
+    const path = saveResponse("fresh", { q1: "yes" });
+    expect(existsSync(surveyDirPath("fresh"))).toBe(true);
+    expect(existsSync(path)).toBe(true);
+    expect(listResponses("fresh")).toHaveLength(1);
+  });
+
+  test("saving in-progress state creates the directory", () => {
+    saveInProgress("fresh-partial", { q1: "yes" }, "q1");
+    expect(existsSync(surveyDirPath("fresh-partial"))).toBe(true);
+    expect(loadInProgress("fresh-partial")?.answers).toEqual({ q1: "yes" });
+  });
+
+  test("a saved response is still deletable", () => {
+    saveResponse("deletable", { q1: "yes" });
+    const [saved] = listResponses("deletable");
+    expect(saved).toBeDefined();
+    expect(deleteResponse("deletable", saved?.timestamp ?? "")).not.toBeNull();
+    expect(listResponses("deletable")).toEqual([]);
   });
 });
