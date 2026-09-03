@@ -37,6 +37,31 @@ function writeResponse(
   return path;
 }
 
+async function runCli(...args: string[]): Promise<{
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}> {
+  const root = join(import.meta.dir, "..");
+  const proc = Bun.spawn(
+    [process.execPath, join(root, "bin", "survey.ts"), ...args],
+    {
+      cwd: root,
+      env: { ...process.env, SURVEY_CLI_HOME: home },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  return { exitCode, stdout, stderr };
+}
+
 describe("buildProgram", () => {
   test("returns a commander command", () => {
     expect(buildProgram()).toBeInstanceOf(Command);
@@ -71,6 +96,45 @@ describe("buildProgram", () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  test("responses show exits non-zero for a missing timestamp", async () => {
+    const result = await runCli(
+      "responses",
+      "onboarding",
+      "show",
+      "2026-04-30T06-00",
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("not found");
+  });
+
+  test("responses show rejects an ambiguous prefix and leaves every match intact", async () => {
+    const firstTimestamp = "2026-04-30T06-00-00-000Z";
+    const secondTimestamp = "2026-04-30T06-00-30-000Z";
+    const first = writeResponse(`${firstTimestamp}.json`, firstTimestamp, {
+      role: "dev",
+    });
+    const second = writeResponse(`${secondTimestamp}.json`, secondTimestamp, {
+      role: "founder",
+    });
+
+    const result = await runCli(
+      "responses",
+      "onboarding",
+      "show",
+      "2026-04-30T06-00",
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toContain("Ambiguous response timestamp: 2026-04-30T06-00");
+    expect(result.stderr).toContain(firstTimestamp);
+    expect(result.stderr).toContain(secondTimestamp);
+    expect(existsSync(first)).toBe(true);
+    expect(existsSync(second)).toBe(true);
   });
 
   test("documented responses delete syntax deletes the response", async () => {

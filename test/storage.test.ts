@@ -24,6 +24,7 @@ import {
   listResponses,
   loadInProgress,
   loadSurveyById,
+  readResponse,
   saveInProgress,
   saveResponse,
 } from "../src/storage.ts";
@@ -88,6 +89,63 @@ describe("storage", () => {
 
     expect(listResponses("onboarding")).toHaveLength(1);
     expect(listResponses("onboarding")[0]?.answers).toEqual({ role: "dev" });
+  });
+
+  test("readResponse accepts exact and unique timestamp prefixes", () => {
+    const dir = join(home, "onboarding");
+    mkdirSync(dir, { recursive: true });
+    const firstTimestamp = "2026-04-30T06-00-00-000Z";
+    const secondTimestamp = "2026-04-30T06-30-00-000Z";
+    writeFileSync(
+      join(dir, `${firstTimestamp}.json`),
+      JSON.stringify({
+        surveyId: "onboarding",
+        timestamp: firstTimestamp,
+        answers: { role: "dev" },
+      }),
+    );
+    writeFileSync(
+      join(dir, `${secondTimestamp}.json`),
+      JSON.stringify({
+        surveyId: "onboarding",
+        timestamp: secondTimestamp,
+        answers: { role: "founder" },
+      }),
+    );
+
+    expect(readResponse("onboarding", firstTimestamp)?.answers).toEqual({ role: "dev" });
+    expect(readResponse("onboarding", "2026-04-30T06-30")?.answers).toEqual({
+      role: "founder",
+    });
+    expect(readResponse("onboarding", "missing")).toBeNull();
+  });
+
+  test("readResponse rejects ambiguous prefixes without modifying responses", () => {
+    const dir = join(home, "onboarding");
+    mkdirSync(dir, { recursive: true });
+    const firstTimestamp = "2026-04-30T06-00-00-000Z";
+    const secondTimestamp = "2026-04-30T06-00-30-000Z";
+    const first = join(dir, `${firstTimestamp}.json`);
+    const second = join(dir, `${secondTimestamp}.json`);
+    const payload = (timestamp: string) =>
+      JSON.stringify({ surveyId: "onboarding", timestamp, answers: {} });
+    writeFileSync(first, payload(firstTimestamp));
+    writeFileSync(second, payload(secondTimestamp));
+
+    let error: unknown;
+    try {
+      readResponse("onboarding", "2026-04-30T06-00");
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AmbiguousResponsePrefixError);
+    expect((error as AmbiguousResponsePrefixError).matches).toEqual([
+      firstTimestamp,
+      secondTimestamp,
+    ]);
+    expect(existsSync(first)).toBe(true);
+    expect(existsSync(second)).toBe(true);
   });
 
   test("deleteResponse removes a uniquely matching saved response", () => {

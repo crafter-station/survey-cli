@@ -88,25 +88,25 @@ export function listResponses(surveyId: string): SavedResponse[] {
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
-export function readResponse(
-  surveyId: string,
-  timestamp: string,
-): SavedResponse | null {
-  return (
-    listResponses(surveyId).find((response) =>
-      response.timestamp.startsWith(timestamp),
-    ) ?? null
-  );
-}
+type ResponseFileMatch = {
+  path: string;
+  timestamp: string;
+};
 
-export function deleteResponse(
+/**
+ * Resolve an exact timestamp or unique timestamp prefix against response
+ * filenames. The filename is the authoritative response identity; JSON metadata
+ * is payload data and must not decide which file a prefix selects.
+ */
+function resolveResponseFile(
   surveyId: string,
   timestamp: string,
-): SavedResponse | null {
+): ResponseFileMatch | null {
   const dir = surveyDir(surveyId);
   const matches = responseFiles(dir)
     .map((file) => ({ file, timestamp: responseTimestamp(file) }))
-    .filter((entry) => entry.timestamp.startsWith(timestamp));
+    .filter((entry) => entry.timestamp.startsWith(timestamp))
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
   const [match] = matches;
   if (!match) return null;
@@ -117,12 +117,32 @@ export function deleteResponse(
     );
   }
 
-  const path = join(dir, match.file);
-  const response = JSON.parse(readFileSync(path, "utf8")) as SavedResponse;
+  return { path: join(dir, match.file), timestamp: match.timestamp };
+}
+
+export function readResponse(
+  surveyId: string,
+  timestamp: string,
+): SavedResponse | null {
+  const match = resolveResponseFile(surveyId, timestamp);
+  if (!match) return null;
+
+  const response = JSON.parse(readFileSync(match.path, "utf8")) as SavedResponse;
+  return { ...response, timestamp: match.timestamp };
+}
+
+export function deleteResponse(
+  surveyId: string,
+  timestamp: string,
+): SavedResponse | null {
+  const match = resolveResponseFile(surveyId, timestamp);
+  if (!match) return null;
+
+  const response = JSON.parse(readFileSync(match.path, "utf8")) as SavedResponse;
 
   // The enumerated filename is the authoritative response identity. JSON metadata
   // is untrusted and must never influence the path that gets unlinked.
-  unlinkSync(path);
+  unlinkSync(match.path);
   return { ...response, timestamp: match.timestamp };
 }
 
